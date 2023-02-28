@@ -157,7 +157,7 @@ aa = do
 -- main = putStrLn $ toStr $ execState tmp ([], 0)
 -- main = BL.writeFile "example.txt" $ tobytestring $ execState tmp ([], 0)
 
-main = BL.writeFile "example.txt" $ compileMPC aa ([], 0)
+main = BL.writeFile "example.bc" $ compileMPC aa ([], 0)
 
 compileMPC :: State Circuit Circuit -> Circuit -> ByteString
 compileMPC circut base = BL.append (BL.append startfile (tobytestring $ execState circut base)) endfile
