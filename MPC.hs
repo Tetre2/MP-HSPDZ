@@ -110,15 +110,19 @@ mpcReveal p = do
   put (a ++ [PAssignment (Public id) (Reveal p)], b)
   return (Public id)
 
--- toStr :: Circuit -> String
--- toStr (c, i) = unwords $ Prelude.map line2string c
+toStr :: Circuit -> String
+toStr (c, i) = unwords $ Prelude.map line2string c
 
--- line2string :: Line -> String
--- line2string (Assignment a (Add b c)) = show a ++ " = " ++ show b ++ " + " ++ show c ++ "\n"
--- line2string (Assignment a (MPCInput p)) = show a ++ " = input\n"
--- line2string (Output a) = "The output is " ++ show a ++ "\n"
--- line2string (Assignment a (Var p)) = show a ++ " = " ++ show p ++ "\n"
--- line2string (Assignment a (Reveal p)) = show a ++ " = " ++ show p ++ "\n"
+line2string :: Line -> String
+line2string (SAssignment a (AddPS b c)) = show a ++ " = " ++ show b ++ " + " ++ show c ++ "\n"
+line2string (SAssignment a (AddSP b c)) = show a ++ " = " ++ show b ++ " + " ++ show c ++ "\n"
+line2string (SAssignment a (AddSS b c)) = show a ++ " = " ++ show b ++ " + " ++ show c ++ "\n"
+line2string (PAssignment a (AddPP b c)) = show a ++ " = " ++ show b ++ " + " ++ show c ++ "\n"
+line2string (SAssignment a (MPCInput p)) = show a ++ " = input(" ++ show p ++ ")\n"
+line2string (Output a) = "Output is in " ++ show a ++ "\n"
+line2string (PAssignment a (Reveal s)) = show a ++ " = " ++ show s ++ "\n"
+line2string (PAssignment a b) = show a ++ " = " ++ show b ++ "\n"
+line2string (SAssignment a b) = show a ++ " = " ++ show b ++ "\n"
 
 tobytestring :: Circuit -> ByteString
 tobytestring (c, i) = BL.concat $ Prelude.map line2bytestring c
@@ -154,10 +158,10 @@ aa = do
   mpcOutput f
   get
 
--- main = putStrLn $ toStr $ execState tmp ([], 0)
+main = putStrLn $ toStr $ execState aa ([], 0)
 -- main = BL.writeFile "example.txt" $ tobytestring $ execState tmp ([], 0)
 
-main = BL.writeFile "example.bc" $ compileMPC aa ([], 0)
+--main = BL.writeFile "example.bc" $ compileMPC aa ([], 0)
 
 compileMPC :: State Circuit Circuit -> Circuit -> ByteString
 compileMPC circut base = BL.append (BL.append startfile (tobytestring $ execState circut base)) endfile
