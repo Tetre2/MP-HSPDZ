@@ -1,3 +1,4 @@
+
 module CppHaskell where
 
 import Control.Exception (throw)
@@ -28,33 +29,96 @@ data Line = SAssignment Secret Expression | PAssignment Public Expression | Outp
 
 type Circuit = ([Line], Int)
 
-mpcPlusPP :: Public -> Public -> State Circuit Public
-mpcPlusPP p1 p2 = do
-  id <- getNewId
-  (a, b) <- get
-  put (a ++ [PAssignment (Public id) (AddPP p1 p2)], b)
-  return (Public b)
+class Monad m => MPCMonad m where 
+  mpcInput' :: Int -> m Secret 
+  mpcPlusPP :: Public -> Public -> m Public
+  mpcPlusPS :: Public -> Secret -> m Secret
+  mpcPlusSP :: Secret -> Public -> m Secret
+  mpcPlusSS :: Secret -> Secret -> m Secret
+  mpcCreateSecretConstant :: Int -> m Secret
+  mpcCreatePublicConstant :: Int -> m Public
+  mpcInput :: Int -> m Secret
+  mpcOutput :: Public -> m Public
+  mpcReveal :: Secret -> m Public
 
-mpcPlusPS :: Public -> Secret -> State Circuit Secret
-mpcPlusPS p1 p2 = do
-  id <- getNewId
-  (a, b) <- get
-  put (a ++ [SAssignment (Secret id) (AddPS p1 p2)], b)
-  return (Secret b)
+instance MPCMonad (State Circuit) where
+  mpcInput' :: Int -> State Circuit Secret
+  mpcInput' p = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [SAssignment (Secret id) (MPCInput p)], b)
+    return (Secret b)
 
-mpcPlusSP :: Secret -> Public -> State Circuit Secret
-mpcPlusSP p1 p2 = do
-  id <- getNewId
-  (a, b) <- get
-  put (a ++ [SAssignment (Secret id) (AddSP p1 p2)], b)
-  return (Secret b)
+  mpcPlusPP :: Public -> Public -> State Circuit Public
+  mpcPlusPP p1 p2 = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [PAssignment (Public id) (AddPP p1 p2)], b)
+    return (Public b)
 
-mpcPlusSS :: Secret -> Secret -> State Circuit Secret
-mpcPlusSS p1 p2 = do
-  id <- getNewId
+  mpcPlusPS :: Public -> Secret -> State Circuit Secret
+  mpcPlusPS p1 p2 = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [SAssignment (Secret id) (AddPS p1 p2)], b)
+    return (Secret b)
+
+  mpcPlusSP :: Secret -> Public -> State Circuit Secret
+  mpcPlusSP p1 p2 = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [SAssignment (Secret id) (AddSP p1 p2)], b)
+    return (Secret b)
+
+  mpcPlusSS :: Secret -> Secret -> State Circuit Secret
+  mpcPlusSS p1 p2 = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [SAssignment (Secret id) (AddSS p1 p2)], b)
+    return (Secret b)
+
+  mpcCreateSecretConstant :: Int -> State Circuit Secret
+  mpcCreateSecretConstant v = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [SAssignment (Secret id) (Constant v)], b)
+    return (Secret id)
+
+  mpcCreatePublicConstant :: Int -> State Circuit Public
+  mpcCreatePublicConstant v = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [PAssignment (Public id) (Constant v)], b)
+    return (Public id)
+
+  mpcInput :: Int -> State Circuit Secret
+  mpcInput p = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [SAssignment (Secret id) (MPCInput p)], b)
+    return (Secret b)
+
+  mpcOutput :: Public -> State Circuit Public
+  mpcOutput (Public v) = do
+    (a, b) <- get
+    put (a ++ [Output (Public v)], b)
+    return (Public b)
+
+  mpcReveal :: Secret -> State Circuit Public
+  mpcReveal p = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [PAssignment (Public id) (Reveal p)], b)
+    return (Public id)
+
+
+getNewId :: State Circuit Int
+getNewId = do
   (a, b) <- get
-  put (a ++ [SAssignment (Secret id) (AddSS p1 p2)], b)
-  return (Secret b)
+  put (a, b + 1)
+  return (b + 1)
+
+
 
 --------- assign var to var currently not used and not a priority
 -- mpcAssign :: VarId -> State Circuit VarId
@@ -70,45 +134,7 @@ mpcPlusSS p1 p2 = do
 --   put (a ++ [Assignment (Private id) (Var (Private v1))], b)
 --   return (Private v1)
 
-mpcCreateSecretConstant :: Int -> State Circuit Secret
-mpcCreateSecretConstant v = do
-  id <- getNewId
-  (a, b) <- get
-  put (a ++ [SAssignment (Secret id) (Constant v)], b)
-  return (Secret id)
 
-mpcCreatePublicConstant :: Int -> State Circuit Public
-mpcCreatePublicConstant v = do
-  id <- getNewId
-  (a, b) <- get
-  put (a ++ [PAssignment (Public id) (Constant v)], b)
-  return (Public id)
-
-mpcInput :: Int -> State Circuit Secret
-mpcInput p = do
-  id <- getNewId
-  (a, b) <- get
-  put (a ++ [SAssignment (Secret id) (MPCInput p)], b)
-  return (Secret b)
-
-mpcOutput :: Public -> State Circuit Public
-mpcOutput (Public v) = do
-  (a, b) <- get
-  put (a ++ [Output (Public v)], b)
-  return (Public b)
-
-getNewId :: State Circuit Int
-getNewId = do
-  (a, b) <- get
-  put (a, b + 1)
-  return (b + 1)
-
-mpcReveal :: Secret -> State Circuit Public
-mpcReveal p = do
-  id <- getNewId
-  (a, b) <- get
-  put (a ++ [PAssignment (Public id) (Reveal p)], b)
-  return (Public id)
 
 toStr :: Circuit -> String
 toStr (c, i) = unwords $ Prelude.map line2string c
@@ -139,15 +165,15 @@ line2bytestring (PAssignment (Public a) (Reveal (Secret s))) = open (fromIntegra
 line2bytestring (PAssignment (Public a) (Constant b)) = ldi (fromIntegral a) (fromIntegral b)
 line2bytestring (SAssignment (Secret a) (Constant b)) = ldsi (fromIntegral a) (fromIntegral b)
 
-tmp :: State Circuit Circuit
+tmp::forall m.MPCMonad m => m ()
 tmp = do
   a <- mpcInput 1
   b <- mpcInput 2
   c <- mpcReveal b
   e <- mpcCreateSecretConstant 4
-  get
+  return ()
 
-aa :: State Circuit Circuit
+aa::forall m.MPCMonad m => m ()
 aa = do
   a <- mpcCreateSecretConstant 2
   b <- mpcCreateSecretConstant 7
@@ -156,12 +182,13 @@ aa = do
   e <- mpcPlusSS d c
   f <- mpcReveal e
   mpcOutput f
-  get
+  return ()
 
 main = putStrLn $ toStr $ execState aa ([], 0)
 -- main = BL.writeFile "example.txt" $ tobytestring $ execState tmp ([], 0)
 
 --main = BL.writeFile "example.bc" $ compileMPC aa ([], 0)
+
 
 compileMPC :: State Circuit Circuit -> Circuit -> ByteString
 compileMPC circut base = BL.append (BL.append startfile (tobytestring $ execState circut base)) endfile
