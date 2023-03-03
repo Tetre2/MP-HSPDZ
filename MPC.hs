@@ -1,5 +1,5 @@
 
-module CppHaskell where
+module MPC where
 
 import Control.Exception (throw)
 import Control.Monad
@@ -10,10 +10,6 @@ import Data.ByteString.Lazy as BL
 import Data.ByteString.Lazy.Char8 (unpack)
 import Data.ByteString.Lazy.Internal
 import VMops
-
-newtype Public = Public Int deriving (Show)
-
-newtype Secret = Secret Int deriving (Show)
 
 data Expression
   = AddSS Secret Secret --redo Add, Sub, Mul with a better structure in the future
@@ -153,9 +149,9 @@ instance MPCMonad (State Circuit) where
 
 
   mpcOutput :: Public -> State Circuit Public
-  mpcOutput (Public v) = do
+  mpcOutput p = do
     (a, b) <- get
-    put (a ++ [Output (Public v)], b)
+    put (a ++ [Output p], b)
     return (Public b)
 
 
@@ -224,22 +220,23 @@ tobytestring :: Circuit -> ByteString
 tobytestring (c, i) = BL.concat $ Prelude.map line2bytestring c
 
 line2bytestring :: Line -> ByteString
-line2bytestring (SAssignment (Secret a) (AddPS (Public b) (Secret c))) = addm (fromIntegral a) (fromIntegral b) (fromIntegral c)
-line2bytestring (SAssignment (Secret a) (AddSP (Secret b) (Public c))) = addm (fromIntegral a) (fromIntegral b) (fromIntegral c)
-line2bytestring (SAssignment (Secret a) (AddSS (Secret b) (Secret c))) = adds (fromIntegral a) (fromIntegral b) (fromIntegral c)
-line2bytestring (PAssignment (Public a) (AddPP (Public b) (Public c))) = addc (fromIntegral a) (fromIntegral b) (fromIntegral c)
-line2bytestring (SAssignment (Secret a) (SubPS (Public b) (Secret c))) = submr (fromIntegral a) (fromIntegral b) (fromIntegral c)
-line2bytestring (SAssignment (Secret a) (SubSP (Secret b) (Public c))) = subml (fromIntegral a) (fromIntegral b) (fromIntegral c)
-line2bytestring (SAssignment (Secret a) (SubSS (Secret b) (Secret c))) = subs (fromIntegral a) (fromIntegral b) (fromIntegral c)
-line2bytestring (PAssignment (Public a) (SubPP (Public b) (Public c))) = subc (fromIntegral a) (fromIntegral b) (fromIntegral c)
-line2bytestring (SAssignment (Secret a) (MulSS (Secret b) (Secret c))) = muls (fromIntegral a) (fromIntegral b) (fromIntegral c)
-line2bytestring (PAssignment (Public a) (MulPP (Public b) (Public c))) = mulc (fromIntegral a) (fromIntegral b) (fromIntegral c)
-line2bytestring (SAssignment (Secret a) (MPCInput p)) = inputmixed (fromIntegral a) (fromIntegral p)
+line2bytestring (PAssignment p (AddPP p1 p2)) = addc p p1 p2
+line2bytestring (PAssignment p (SubPP p1 p2)) = subc p p1 p2
+line2bytestring (PAssignment p (MulPP p1 p2)) = mulc p p1 p2
+line2bytestring (PAssignment p (Reveal s)) = open p s
+line2bytestring (PAssignment p (Constant b)) = ldi p b
+
+line2bytestring (SAssignment s (AddPS p s1)) = addmr s p s1
+line2bytestring (SAssignment s (AddSP s1 p)) = addml s s1 p
+line2bytestring (SAssignment s (AddSS s1 s2)) = adds s s1 s2
+line2bytestring (SAssignment s (SubPS p s1)) = submr s p s1
+line2bytestring (SAssignment s (SubSP s1 p)) = subml s s1 p
+line2bytestring (SAssignment s (SubSS s1 s2)) = subs s s1 s2
+line2bytestring (SAssignment s (MulSS s1 s2)) = muls s s1 s2
+line2bytestring (SAssignment s (MPCInput i)) = inputmixed s i
+line2bytestring (SAssignment s (Constant i)) = ldsi s i
+
 line2bytestring (Output (Public a)) = printregplain (fromIntegral a)
--- line2bytestring (Assignment a (Var p)) = runPut $ putWord32be 77
-line2bytestring (PAssignment (Public a) (Reveal (Secret s))) = open (fromIntegral a) (fromIntegral s)
-line2bytestring (PAssignment (Public a) (Constant b)) = ldi (fromIntegral a) (fromIntegral b)
-line2bytestring (SAssignment (Secret a) (Constant b)) = ldsi (fromIntegral a) (fromIntegral b)
 
 tmp::forall m.MPCMonad m => m ()
 tmp = do
