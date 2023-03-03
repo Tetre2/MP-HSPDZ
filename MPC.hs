@@ -25,12 +25,11 @@ data Expression
   | Constant Int
   deriving (Show)
 
-data Line = SAssignment Secret Expression | PAssignment Public Expression | Output Public deriving (Show) -- byta ut Secret och Public till Expression?
+data Line = SAssignment Secret Expression | PAssignment Public Expression | Output Public deriving (Show)
 
 type Circuit = ([Line], Int)
 
 class Monad m => MPCMonad m where 
-  mpcInput' :: Int -> m Secret 
   mpcPlusPP :: Public -> Public -> m Public
   mpcPlusPS :: Public -> Secret -> m Secret
   mpcPlusSP :: Secret -> Public -> m Secret
@@ -42,13 +41,6 @@ class Monad m => MPCMonad m where
   mpcReveal :: Secret -> m Public
 
 instance MPCMonad (State Circuit) where
-  mpcInput' :: Int -> State Circuit Secret
-  mpcInput' p = do
-    id <- getNewId
-    (a, b) <- get
-    put (a ++ [SAssignment (Secret id) (MPCInput p)], b)
-    return (Secret b)
-
   mpcPlusPP :: Public -> Public -> State Circuit Public
   mpcPlusPP p1 p2 = do
     id <- getNewId
@@ -118,6 +110,11 @@ getNewId = do
   put (a, b + 1)
   return (b + 1)
 
+makeByteCode :: (forall m.MPCMonad m => m ()) -> ByteString 
+makeByteCode s = addByteCodePadding $ execState s ([], 0) 
+
+addByteCodePadding :: Circuit -> ByteString
+addByteCodePadding circut = BL.append (BL.append startfile (tobytestring circut)) endfile
 
 
 --------- assign var to var currently not used and not a priority
@@ -182,13 +179,13 @@ aa = do
   e <- mpcPlusSS d c
   f <- mpcReveal e
   mpcOutput f
-  return ()
+  return () 
+  
 
-main = putStrLn $ toStr $ execState aa ([], 0)
+--main = putStrLn $ toStr $ execState tmp ([], 0)
 -- main = BL.writeFile "example.txt" $ tobytestring $ execState tmp ([], 0)
 
 --main = BL.writeFile "example.bc" $ compileMPC aa ([], 0)
 
+main = BL.writeFile "example.bc" $ makeByteCode aa
 
-compileMPC :: State Circuit Circuit -> Circuit -> ByteString
-compileMPC circut base = BL.append (BL.append startfile (tobytestring $ execState circut base)) endfile
