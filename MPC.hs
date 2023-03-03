@@ -16,10 +16,14 @@ newtype Public = Public Int deriving (Show)
 newtype Secret = Secret Int deriving (Show)
 
 data Expression
-  = AddSS Secret Secret
+  = AddSS Secret Secret --redo Add, Sub, Mul with a better structure in the future
   | AddSP Secret Public
   | AddPS Public Secret
   | AddPP Public Public
+  | SubSS Secret Secret
+  | SubSP Secret Public
+  | SubPS Public Secret
+  | SubPP Public Public
   | MPCInput Int
   | Reveal Secret
   | Constant Int
@@ -34,6 +38,10 @@ class Monad m => MPCMonad m where
   mpcPlusPS :: Public -> Secret -> m Secret
   mpcPlusSP :: Secret -> Public -> m Secret
   mpcPlusSS :: Secret -> Secret -> m Secret
+  mpcMinusPP :: Public -> Public -> m Public
+  mpcMinusPS :: Public -> Secret -> m Secret
+  mpcMinusSP :: Secret -> Public -> m Secret
+  mpcMinusSS :: Secret -> Secret -> m Secret
   mpcCreateSecretConstant :: Int -> m Secret
   mpcCreatePublicConstant :: Int -> m Public
   mpcInput :: Int -> m Secret
@@ -69,6 +77,38 @@ instance MPCMonad (State Circuit) where
     put (a ++ [SAssignment (Secret id) (AddSS p1 p2)], b)
     return (Secret b)
 
+
+
+  mpcMinusPP :: Public -> Public -> State Circuit Public
+  mpcMinusPP p1 p2 = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [PAssignment (Public id) (SubPP p1 p2)], b)
+    return (Public b)
+
+  mpcMinusPS :: Public -> Secret -> State Circuit Secret
+  mpcMinusPS p1 p2 = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [SAssignment (Secret id) (SubPS p1 p2)], b)
+    return (Secret b)
+
+  mpcMinusSP :: Secret -> Public -> State Circuit Secret
+  mpcMinusSP p1 p2 = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [SAssignment (Secret id) (SubSP p1 p2)], b)
+    return (Secret b)
+
+  mpcMinusSS :: Secret -> Secret -> State Circuit Secret
+  mpcMinusSS p1 p2 = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [SAssignment (Secret id) (SubSS p1 p2)], b)
+    return (Secret b)
+
+
+
   mpcCreateSecretConstant :: Int -> State Circuit Secret
   mpcCreateSecretConstant v = do
     id <- getNewId
@@ -83,6 +123,8 @@ instance MPCMonad (State Circuit) where
     put (a ++ [PAssignment (Public id) (Constant v)], b)
     return (Public id)
 
+
+
   mpcInput :: Int -> State Circuit Secret
   mpcInput p = do
     id <- getNewId
@@ -90,11 +132,15 @@ instance MPCMonad (State Circuit) where
     put (a ++ [SAssignment (Secret id) (MPCInput p)], b)
     return (Secret b)
 
+
+
   mpcOutput :: Public -> State Circuit Public
   mpcOutput (Public v) = do
     (a, b) <- get
     put (a ++ [Output (Public v)], b)
     return (Public b)
+
+
 
   mpcReveal :: Secret -> State Circuit Public
   mpcReveal p = do
@@ -102,6 +148,9 @@ instance MPCMonad (State Circuit) where
     (a, b) <- get
     put (a ++ [PAssignment (Public id) (Reveal p)], b)
     return (Public id)
+
+
+
 
 
 getNewId :: State Circuit Int
@@ -141,6 +190,10 @@ line2string (SAssignment a (AddPS b c)) = show a ++ " = " ++ show b ++ " + " ++ 
 line2string (SAssignment a (AddSP b c)) = show a ++ " = " ++ show b ++ " + " ++ show c ++ "\n"
 line2string (SAssignment a (AddSS b c)) = show a ++ " = " ++ show b ++ " + " ++ show c ++ "\n"
 line2string (PAssignment a (AddPP b c)) = show a ++ " = " ++ show b ++ " + " ++ show c ++ "\n"
+line2string (SAssignment a (SubPS b c)) = show a ++ " = " ++ show b ++ " - " ++ show c ++ "\n"
+line2string (SAssignment a (SubSP b c)) = show a ++ " = " ++ show b ++ " - " ++ show c ++ "\n"
+line2string (SAssignment a (SubSS b c)) = show a ++ " = " ++ show b ++ " - " ++ show c ++ "\n"
+line2string (PAssignment a (SubPP b c)) = show a ++ " = " ++ show b ++ " - " ++ show c ++ "\n"
 line2string (SAssignment a (MPCInput p)) = show a ++ " = input(" ++ show p ++ ")\n"
 line2string (Output a) = "Output is in " ++ show a ++ "\n"
 line2string (PAssignment a (Reveal s)) = show a ++ " = " ++ show s ++ "\n"
@@ -155,6 +208,10 @@ line2bytestring (SAssignment (Secret a) (AddPS (Public b) (Secret c))) = addm (f
 line2bytestring (SAssignment (Secret a) (AddSP (Secret b) (Public c))) = addm (fromIntegral a) (fromIntegral b) (fromIntegral c)
 line2bytestring (SAssignment (Secret a) (AddSS (Secret b) (Secret c))) = adds (fromIntegral a) (fromIntegral b) (fromIntegral c)
 line2bytestring (PAssignment (Public a) (AddPP (Public b) (Public c))) = addc (fromIntegral a) (fromIntegral b) (fromIntegral c)
+line2bytestring (SAssignment (Secret a) (SubPS (Public b) (Secret c))) = submr (fromIntegral a) (fromIntegral b) (fromIntegral c)
+line2bytestring (SAssignment (Secret a) (SubSP (Secret b) (Public c))) = subml (fromIntegral a) (fromIntegral b) (fromIntegral c)
+line2bytestring (SAssignment (Secret a) (SubSS (Secret b) (Secret c))) = subs (fromIntegral a) (fromIntegral b) (fromIntegral c)
+line2bytestring (PAssignment (Public a) (SubPP (Public b) (Public c))) = subc (fromIntegral a) (fromIntegral b) (fromIntegral c)
 line2bytestring (SAssignment (Secret a) (MPCInput p)) = inputmixed (fromIntegral a) (fromIntegral p)
 line2bytestring (Output (Public a)) = printregplain (fromIntegral a)
 -- line2bytestring (Assignment a (Var p)) = runPut $ putWord32be 77
@@ -164,10 +221,9 @@ line2bytestring (SAssignment (Secret a) (Constant b)) = ldsi (fromIntegral a) (f
 
 tmp::forall m.MPCMonad m => m ()
 tmp = do
-  a <- mpcInput 1
-  b <- mpcInput 2
-  c <- mpcReveal b
-  e <- mpcCreateSecretConstant 4
+  a <- mpcCreateSecretConstant 1
+  b <- mpcCreateSecretConstant 2
+  c <- mpcMinusSS a b
   return ()
 
 aa::forall m.MPCMonad m => m ()
@@ -176,16 +232,16 @@ aa = do
   b <- mpcCreateSecretConstant 7
   c <- mpcCreateSecretConstant 10
   d <- mpcPlusSS a b
-  e <- mpcPlusSS d c
+  e <- mpcMinusSS d c
   f <- mpcReveal e
   mpcOutput f
   return () 
   
 
---main = putStrLn $ toStr $ execState tmp ([], 0)
+-- main = putStrLn $ toStr $ execState aa ([], 0)
 -- main = BL.writeFile "example.txt" $ tobytestring $ execState tmp ([], 0)
 
 --main = BL.writeFile "example.bc" $ compileMPC aa ([], 0)
 
-main = BL.writeFile "example.bc" $ makeByteCode aa
+main = BL.writeFile "example.bc" $ makeByteCode tmp
 

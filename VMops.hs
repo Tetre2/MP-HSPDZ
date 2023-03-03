@@ -1,4 +1,4 @@
-module VMops (addc, adds, addm, ldi, ldsi, inputmixed, printregplain, open, startfile, endfile) where
+module VMops (addc, adds, addm, ldi, ldsi, inputmixed, printregplain, open, startfile, endfile, subc, subml, submr, subs) where
 
 import Data.Binary as B
 import Data.Binary.Put
@@ -104,6 +104,7 @@ printCharacter char = do
   putWord32be char
   putWord32be endop
 
+--Reveal secret registers (vectors) to clear registers (vectors)
 open :: Word32 -> Word32 -> ByteString
 open dest source = runPut $ reveal dest source
 
