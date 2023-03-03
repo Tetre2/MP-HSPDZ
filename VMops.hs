@@ -1,4 +1,4 @@
-module VMops (addc, adds, addm, ldi, ldsi, inputmixed, printregplain, open, startfile, endfile, subc, subml, submr, subs) where
+module VMops (addc, adds, addm, ldi, ldsi, inputmixed, printregplain, open, startfile, endfile, subc, subml, submr, subs, muls, mulc) where
 
 import Data.Binary as B
 import Data.Binary.Put
@@ -136,6 +136,38 @@ submr res v1 v2 = runPut $ subtract' 0x28 res v1 v2
 subtract' :: Word32 -> Word32 -> Word32 -> Word32 -> Put
 subtract' op res v1 v2 = do
   putWord32be op
+  putWord32be res
+  putWord32be v1
+  putWord32be v2
+  putWord32be endop
+
+
+-- Offline data usage. Necessary to avoid reusage while using preprocessing from files. 
+-- Also used to multithreading for expensive preprocessing.
+use :: ByteString
+use = runPut $ do
+  putWord32be 0x17
+  putWord32be 0x0
+  putWord32be 0x0
+  putWord32be 0x1
+  putWord32be endop
+
+
+-- (Element-wise) multiplication of secret registers (vectors).
+muls :: Word32 -> Word32 -> Word32 -> ByteString
+muls res v1 v2 = Data.ByteString.Lazy.concat [m, use] -- Unkonwn why use op is needed
+  where m = runPut $ do{ 
+    putWord32be 0xa6;
+    putWord32be 0x3;
+    putWord32be res;
+    putWord32be v1;
+    putWord32be v2;
+    putWord32be endop}
+
+-- Clear multiplication.
+mulc :: Word32 -> Word32 -> Word32 -> ByteString
+mulc res v1 v2 = runPut $ do 
+  putWord32be 0x30
   putWord32be res
   putWord32be v1
   putWord32be v2

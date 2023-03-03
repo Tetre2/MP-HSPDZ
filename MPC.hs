@@ -24,6 +24,8 @@ data Expression
   | SubSP Secret Public
   | SubPS Public Secret
   | SubPP Public Public
+  | MulPP Public Public
+  | MulSS Secret Secret
   | MPCInput Int
   | Reveal Secret
   | Constant Int
@@ -42,6 +44,8 @@ class Monad m => MPCMonad m where
   mpcMinusPS :: Public -> Secret -> m Secret
   mpcMinusSP :: Secret -> Public -> m Secret
   mpcMinusSS :: Secret -> Secret -> m Secret
+  mpcMultiplicationPP :: Public -> Public -> m Public
+  mpcMultiplicationSS :: Secret -> Secret -> m Secret
   mpcCreateSecretConstant :: Int -> m Secret
   mpcCreatePublicConstant :: Int -> m Public
   mpcInput :: Int -> m Secret
@@ -107,6 +111,20 @@ instance MPCMonad (State Circuit) where
     put (a ++ [SAssignment (Secret id) (SubSS p1 p2)], b)
     return (Secret b)
 
+
+  mpcMultiplicationPP :: Public -> Public -> State Circuit Public
+  mpcMultiplicationPP p1 p2 = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [PAssignment (Public id) (MulPP p1 p2)], b)
+    return (Public b)
+
+  mpcMultiplicationSS :: Secret -> Secret -> State Circuit Secret
+  mpcMultiplicationSS p1 p2 = do
+    id <- getNewId
+    (a, b) <- get
+    put (a ++ [SAssignment (Secret id) (MulSS p1 p2)], b)
+    return (Secret b)
 
 
   mpcCreateSecretConstant :: Int -> State Circuit Secret
@@ -194,6 +212,8 @@ line2string (SAssignment a (SubPS b c)) = show a ++ " = " ++ show b ++ " - " ++ 
 line2string (SAssignment a (SubSP b c)) = show a ++ " = " ++ show b ++ " - " ++ show c ++ "\n"
 line2string (SAssignment a (SubSS b c)) = show a ++ " = " ++ show b ++ " - " ++ show c ++ "\n"
 line2string (PAssignment a (SubPP b c)) = show a ++ " = " ++ show b ++ " - " ++ show c ++ "\n"
+line2string (PAssignment a (MulPP b c)) = show a ++ " = " ++ show b ++ " * " ++ show c ++ "\n"
+line2string (SAssignment a (MulSS b c)) = show a ++ " = " ++ show b ++ " * " ++ show c ++ "\n"
 line2string (SAssignment a (MPCInput p)) = show a ++ " = input(" ++ show p ++ ")\n"
 line2string (Output a) = "Output is in " ++ show a ++ "\n"
 line2string (PAssignment a (Reveal s)) = show a ++ " = " ++ show s ++ "\n"
@@ -212,6 +232,8 @@ line2bytestring (SAssignment (Secret a) (SubPS (Public b) (Secret c))) = submr (
 line2bytestring (SAssignment (Secret a) (SubSP (Secret b) (Public c))) = subml (fromIntegral a) (fromIntegral b) (fromIntegral c)
 line2bytestring (SAssignment (Secret a) (SubSS (Secret b) (Secret c))) = subs (fromIntegral a) (fromIntegral b) (fromIntegral c)
 line2bytestring (PAssignment (Public a) (SubPP (Public b) (Public c))) = subc (fromIntegral a) (fromIntegral b) (fromIntegral c)
+line2bytestring (SAssignment (Secret a) (MulSS (Secret b) (Secret c))) = muls (fromIntegral a) (fromIntegral b) (fromIntegral c)
+line2bytestring (PAssignment (Public a) (MulPP (Public b) (Public c))) = mulc (fromIntegral a) (fromIntegral b) (fromIntegral c)
 line2bytestring (SAssignment (Secret a) (MPCInput p)) = inputmixed (fromIntegral a) (fromIntegral p)
 line2bytestring (Output (Public a)) = printregplain (fromIntegral a)
 -- line2bytestring (Assignment a (Var p)) = runPut $ putWord32be 77
@@ -223,7 +245,9 @@ tmp::forall m.MPCMonad m => m ()
 tmp = do
   a <- mpcCreateSecretConstant 1
   b <- mpcCreateSecretConstant 2
-  c <- mpcMinusSS a b
+  c <- mpcReveal a
+  d <- mpcReveal b
+  e <- mpcMultiplicationPP c d
   return ()
 
 aa::forall m.MPCMonad m => m ()
@@ -238,7 +262,7 @@ aa = do
   return () 
   
 
--- main = putStrLn $ toStr $ execState aa ([], 0)
+-- main = putStrLn $ toStr $ execState tmp ([], 0)
 -- main = BL.writeFile "example.txt" $ tobytestring $ execState tmp ([], 0)
 
 --main = BL.writeFile "example.bc" $ compileMPC aa ([], 0)
