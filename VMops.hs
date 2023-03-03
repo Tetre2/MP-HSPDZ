@@ -115,3 +115,27 @@ reveal dest source = do
   putWord32be dest
   putWord32be source
   putWord32be endop
+
+--Clear subtraction
+subc :: Word32 -> Word32 -> Word32 -> ByteString
+subc res v1 v2 = runPut $ subtract' 0x25 res v1 v2
+
+--Secret subtraction
+subs :: Word32 -> Word32 -> Word32 -> ByteString
+subs res v1 v2 = runPut $ subtract' 0x26 res v1 v2
+
+--Subtract clear from secret value (v1 secret, v2 clear)
+subml :: Word32 -> Word32 -> Word32 -> ByteString
+subml res v1 v2 = runPut $ subtract' 0x27 res v1 v2
+
+--Subtract secret from clear value (v1 clear, v2 secret)
+submr :: Word32 -> Word32 -> Word32 -> ByteString
+submr res v1 v2 = runPut $ subtract' 0x28 res v1 v2
+
+subtract' :: Word32 -> Word32 -> Word32 -> Word32 -> Put
+subtract' op res v1 v2 = do
+  putWord32be op
+  putWord32be res
+  putWord32be v1
+  putWord32be v2
+  putWord32be endop
